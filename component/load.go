@@ -2,7 +2,6 @@ package component
 
 import (
 	"context"
-	"fmt"
 	"image"
 	"image/gif"
 	"image/png"
@@ -71,12 +70,17 @@ func handleLoadMsg(m Model, msg loadMsg) (Model, tea.Cmd) {
 	return handleLoadMsgStatic(m, msg)
 }
 
-
-
 func handleLoadMsgStatic(m Model, msg loadMsg) (Model, tea.Cmd) {
 	defer msg.Close()
+	var err error
+	var img string
 
-	img, err := readerToimage(m.width, m.height, m.url, msg)
+	if strings.HasSuffix(strings.ToLower(m.url), ".svg") {
+		img, err = svgToimage(m.width, m.height, msg)
+	} else {
+		img, err = ReaderToimage(m.width, m.height, msg)
+	}
+
 	if err != nil {
 		return m, func() tea.Msg { return errMsg{err} }
 	}
@@ -100,7 +104,7 @@ func handleLoadMsgAnimation(m Model, msg loadMsg) (Model, tea.Cmd) {
 	// precompute the frames for performance reasons
 	var frames []string
 	for _, img := range gimg.Image {
-		str, err := imageToString(m.width, m.height, m.url, img)
+		str, err := imageToString(m.width, m.height, img)
 		if err != nil {
 			return m, wrapErrCmd(err)
 		}
@@ -117,8 +121,7 @@ func handleLoadMsgAnimation(m Model, msg loadMsg) (Model, tea.Cmd) {
 	}
 }
 
-
-func imageToString(width, height uint, url string, img image.Image) (string, error) {
+func imageToString(width, height uint, img image.Image) (string, error) {
 	img = resize.Thumbnail(width, height*2-4, img, resize.Lanczos3)
 	b := img.Bounds()
 	w := b.Max.X
@@ -141,25 +144,19 @@ func imageToString(width, height uint, url string, img image.Image) (string, err
 		}
 		str.WriteString("\n")
 	}
-	str.WriteString(fmt.Sprintf("q to quit | %s\n", url))
 	return str.String(), nil
 }
 
-
-func readerToimage(width uint, height uint, url string, r io.Reader) (string, error) {
-	if strings.HasSuffix(strings.ToLower(url), ".svg") {
-		return svgToimage(width, height, url, r)
-	}
-
+func ReaderToimage(width uint, height uint, r io.Reader) (string, error) {
 	img, _, err := imageorient.Decode(r)
 	if err != nil {
 		return "", err
 	}
 
-	return imageToString(width, height, url, img)
+	return imageToString(width, height, img)
 }
 
-func svgToimage(width uint, height uint, url string, r io.Reader) (string, error) {
+func svgToimage(width uint, height uint, r io.Reader) (string, error) {
 	// Original author: https://stackoverflow.com/users/10826783/usual-human
 	// https://stackoverflow.com/questions/42993407/how-to-create-and-export-svg-to-png-jpeg-in-golang
 	// Adapted to use size from SVG, and to use temp file.
@@ -200,5 +197,5 @@ func svgToimage(width uint, height uint, url string, r io.Reader) (string, error
 	if err != nil {
 		return "", err
 	}
-	return imageToString(width, height, url, img)
+	return imageToString(width, height, img)
 }
